@@ -184,12 +184,12 @@ function EnrollmentsPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Enrollment ID</TableHead>
                 <TableHead>Created</TableHead>
                 <TableHead>Name</TableHead>
                 <TableHead>Contact</TableHead>
                 <TableHead>Email</TableHead>
                 <TableHead>Course</TableHead>
+                <TableHead>Session Type</TableHead>
                 <TableHead className="text-right">Total</TableHead>
                 <TableHead>Payment</TableHead>
                 <TableHead>Status</TableHead>
@@ -205,7 +205,6 @@ function EnrollmentsPage() {
               )}
               {rows.map((r) => (
                 <TableRow key={r.id}>
-                  <TableCell className="font-mono text-xs">{r.id.slice(0, 8)}…</TableCell>
                   <TableCell className="whitespace-nowrap text-sm">
                     {r.created_at ? new Date(r.created_at).toLocaleString() : ""}
                   </TableCell>
@@ -214,9 +213,8 @@ function EnrollmentsPage() {
                   </TableCell>
                   <TableCell>{r.student_mobile || r.student_home_phone || "—"}</TableCell>
                   <TableCell>{r.student_email || "—"}</TableCell>
-                  <TableCell className="font-mono text-xs">
-                    {r.course_id ? `${r.course_id.slice(0, 8)}…` : "—"}
-                  </TableCell>
+                  <TableCell>{r.course_name || "—"}</TableCell>
+                  <TableCell>{r.session_type_label || "—"}</TableCell>
                   <TableCell className="text-right">
                     {r.total_payable != null ? `$${Number(r.total_payable).toFixed(2)}` : "—"}
                   </TableCell>

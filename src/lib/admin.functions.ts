@@ -79,11 +79,32 @@ export type EnrollmentRow = {
   student_city: string | null;
   student_license_number: string | null;
   course_id: string | null;
+  course_name: string | null;
+  session_type: string | null;
+  session_type_label: string | null;
   total_payable: number | null;
   amount_paid: number | null;
   payment_status: string | null;
   enrollment_status: string | null;
 };
+
+function formatSessionType(value: string | null | undefined) {
+  if (!value) return null;
+
+  switch (value) {
+    case "online":
+      return "Online";
+    case "in_person":
+      return "In Person";
+    case "not_applicable":
+      return "Not Applicable";
+    default:
+      return value
+        .split("_")
+        .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+        .join(" ");
+  }
+}
 
 async function requireAdmin() {
   if (isAdminLoginDisabled()) return;
@@ -106,32 +127,49 @@ async function queryEnrollments(filters: z.infer<typeof ListInput>, limit: numbe
     if (/^[0-9a-f-]{8,}$/i.test(search) && search.includes("-")) {
       directEnrollmentId = search;
     }
-    const like = `%${search.replace(/[%_]/g, (m) => "\\" + m)}%`;
-    const { data: students, error: sErr } = await supabase
-      .from("students")
-      .select("id")
-      .or(
-        [
-          `mobile_phone_number.ilike.${like}`,
-          `home_phone_number.ilike.${like}`,
-          `email.ilike.${like}`,
-          `first_name.ilike.${like}`,
-          `last_name.ilike.${like}`,
-          `license_number.ilike.${like}`,
-        ].join(","),
-      )
-      .limit(2000);
-    if (sErr) throw new Error(sErr.message);
-    studentIds = (students ?? []).map((s: { id: string }) => s.id);
+    const tokens = search.split(/\s+/).map((token) => token.trim()).filter(Boolean);
+    let matchedIds: string[] | null = null;
+
+    for (const token of tokens) {
+      const like = `%${token.replace(/[%_]/g, (m) => "\\" + m)}%`;
+      const { data: students, error: sErr } = await supabase
+        .from("students")
+        .select("id")
+        .or(
+          [
+            `mobile_phone_number.ilike.${like}`,
+            `home_phone_number.ilike.${like}`,
+            `email.ilike.${like}`,
+            `first_name.ilike.${like}`,
+            `last_name.ilike.${like}`,
+            `license_number.ilike.${like}`,
+          ].join(","),
+        )
+        .limit(2000);
+      if (sErr) throw new Error(sErr.message);
+
+      const ids = (students ?? []).map((s: { id: string }) => s.id);
+      if (matchedIds === null) {
+        matchedIds = ids;
+      } else {
+        const idSet = new Set(ids);
+        matchedIds = matchedIds.filter((id) => idSet.has(id));
+      }
+
+      if (matchedIds.length === 0) break;
+    }
+
+    studentIds = matchedIds ?? [];
   }
 
   let q = supabase
     .from("enrollments")
     .select(
-      "id, created_at, course_id, total_payable, amount_paid, payment_status, enrollment_status, student_id",
+      "id, created_at, course_id, session_type, total_payable, amount_paid, payment_status, enrollment_status, student_id",
       { count: "exact" },
     )
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false })
+    .order("id", { ascending: false });
 
   if (filters.date_from) q = q.gte("created_at", filters.date_from);
   if (filters.date_to) {
@@ -157,8 +195,13 @@ async function queryEnrollments(filters: z.infer<typeof ListInput>, limit: numbe
   if (error) throw new Error(error.message);
   const list = enrolls ?? [];
 
+  const enrollmentIds = list.map((e) => e.id);
   const sIds = Array.from(new Set(list.map((e) => e.student_id).filter(Boolean))) as string[];
+  const fallbackCourseIds = list.map((e) => e.course_id).filter(Boolean);
   let studentMap: Record<string, Record<string, unknown>> = {};
+  let courseMap: Record<string, { name: string | null }> = {};
+  let enrollmentCourseMap: Record<string, string[]> = {};
+
   if (sIds.length) {
     const { data: studs } = await supabase
       .from("students")
@@ -169,12 +212,59 @@ async function queryEnrollments(filters: z.infer<typeof ListInput>, limit: numbe
     studentMap = Object.fromEntries((studs ?? []).map((s: { id: string }) => [s.id, s]));
   }
 
+  if (enrollmentIds.length) {
+    const { data: enrollmentCourses, error: ecErr } = await supabase
+      .from("enrollment_course")
+      .select("enrollment_id, course_id")
+      .in("enrollment_id", enrollmentIds);
+    if (ecErr) throw new Error(ecErr.message);
+
+    for (const entry of (enrollmentCourses ?? []) as Array<{
+      enrollment_id: string;
+      course_id: string | null;
+    }>) {
+      if (!entry.course_id) continue;
+      if (!enrollmentCourseMap[entry.enrollment_id]) enrollmentCourseMap[entry.enrollment_id] = [];
+      enrollmentCourseMap[entry.enrollment_id].push(entry.course_id);
+    }
+  }
+
+  const courseIds = Array.from(
+    new Set([...fallbackCourseIds, ...Object.values(enrollmentCourseMap).flat()].filter(Boolean)),
+  ) as string[];
+
+  if (courseIds.length) {
+    const { data: courses } = await supabase
+      .from("courses")
+      .select("id, name")
+      .in("id", courseIds);
+
+    const typedCourses = (courses ?? []) as Array<{ id: string; name: string | null }>;
+    courseMap = Object.fromEntries(typedCourses.map((course) => [course.id, course]));
+  }
+
   const rows: EnrollmentRow[] = list.map((e) => {
     const s = (e.student_id && studentMap[e.student_id]) || {};
+    const selectedCourseIds = enrollmentCourseMap[e.id]?.length
+      ? enrollmentCourseMap[e.id]
+      : e.course_id
+        ? [e.course_id]
+        : [];
+    const courseName = Array.from(
+      new Set(
+        selectedCourseIds
+          .map((courseId) => courseMap[courseId]?.name ?? null)
+          .filter((name): name is string => Boolean(name)),
+      ),
+    ).join(", ");
+
     return {
       id: e.id,
       created_at: e.created_at,
       course_id: e.course_id,
+      course_name: courseName || null,
+      session_type: e.session_type ?? null,
+      session_type_label: formatSessionType(e.session_type),
       total_payable: e.total_payable,
       amount_paid: e.amount_paid,
       payment_status: e.payment_status,
@@ -216,7 +306,8 @@ function toCsv(rows: EnrollmentRow[]): string {
     "Home Phone",
     "City",
     "License Number",
-    "Course ID",
+    "Course",
+    "Session Type",
     "Total Payable",
     "Amount Paid",
     "Payment Status",
@@ -241,7 +332,8 @@ function toCsv(rows: EnrollmentRow[]): string {
         r.student_home_phone,
         r.student_city,
         r.student_license_number,
-        r.course_id,
+        r.course_name,
+        r.session_type_label,
         r.total_payable,
         r.amount_paid,
         r.payment_status,
@@ -276,7 +368,8 @@ export const exportEnrollments = createServerFn({ method: "POST" })
         "Home Phone",
         "City",
         "License Number",
-        "Course ID",
+        "Course",
+        "Session Type",
         "Total Payable",
         "Amount Paid",
         "Payment Status",
@@ -294,7 +387,8 @@ export const exportEnrollments = createServerFn({ method: "POST" })
           r.student_home_phone,
           r.student_city,
           r.student_license_number,
-          r.course_id,
+          r.course_name,
+          r.session_type_label,
           r.total_payable,
           r.amount_paid,
           r.payment_status,
