@@ -1,7 +1,8 @@
 import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useState, type FormEvent } from "react";
+import { ChevronDown } from "lucide-react";
 import {
   adminLogout,
   adminMe,
@@ -20,6 +21,12 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 export const Route = createFileRoute("/admin/enrollments")({
   ssr: false,
@@ -38,8 +45,11 @@ function downloadFile(filename: string, content: string | Blob, mime: string) {
   const a = document.createElement("a");
   a.href = url;
   a.download = filename;
+  a.style.display = "none";
+  document.body.appendChild(a);
   a.click();
-  URL.revokeObjectURL(url);
+  a.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 function base64ToBlob(b64: string, mime: string): Blob {
@@ -60,6 +70,7 @@ function EnrollmentsPage() {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [page, setPage] = useState(1);
+  const [isExporting, setIsExporting] = useState(false);
   const pageSize = 50;
 
   const [filters, setFilters] = useState({ search: "", date_from: "", date_to: "" });
@@ -70,7 +81,7 @@ function EnrollmentsPage() {
       list({ data: { ...filters, page, page_size: pageSize } }),
   });
 
-  function applyFilters(e?: React.FormEvent) {
+  function applyFilters(e?: FormEvent) {
     e?.preventDefault();
     setPage(1);
     setFilters({ search, date_from: dateFrom, date_to: dateTo });
@@ -85,15 +96,20 @@ function EnrollmentsPage() {
   }
 
   async function onExport(format: "csv" | "xlsx") {
-    const res = await exportFn({ data: { ...filters, page: 1, page_size: 10000, format } });
-    if (res.format === "csv") {
-      downloadFile(res.filename, res.content, "text/csv;charset=utf-8");
-    } else {
-      const blob = base64ToBlob(
-        res.base64,
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      );
-      downloadFile(res.filename, blob, blob.type);
+    try {
+      setIsExporting(true);
+      const res = await exportFn({ data: { ...filters, format } });
+      if (res.format === "csv") {
+        downloadFile(res.filename, res.content, "text/csv;charset=utf-8");
+      } else {
+        const blob = base64ToBlob(
+          res.base64,
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        );
+        downloadFile(res.filename, blob, blob.type);
+      }
+    } finally {
+      setIsExporting(false);
     }
   }
 
@@ -164,14 +180,22 @@ function EnrollmentsPage() {
           <p className="text-sm text-muted-foreground">
             {isFetching ? "Loading…" : `${total} result${total === 1 ? "" : "s"}`}
           </p>
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={() => onExport("csv")}>
-              Export CSV
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => onExport("xlsx")}>
-              Export XLSX
-            </Button>
-          </div>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" disabled={isExporting}>
+                {isExporting ? "Exporting…" : "Export"}
+                <ChevronDown className="ml-2 size-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem disabled={isExporting} onClick={() => onExport("csv")}>
+                Export as CSV
+              </DropdownMenuItem>
+              <DropdownMenuItem disabled={isExporting} onClick={() => onExport("xlsx")}>
+                Export as XLSX
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
 
         {error && (
@@ -185,7 +209,7 @@ function EnrollmentsPage() {
             <TableHeader>
               <TableRow>
                 <TableHead>Created</TableHead>
-                <TableHead>Name</TableHead>
+                <TableHead>Full Name</TableHead>
                 <TableHead>Contact</TableHead>
                 <TableHead>Email</TableHead>
                 <TableHead>Course</TableHead>
@@ -209,7 +233,9 @@ function EnrollmentsPage() {
                     {r.created_at ? new Date(r.created_at).toLocaleString() : ""}
                   </TableCell>
                   <TableCell>
-                    {[r.student_first_name, r.student_last_name].filter(Boolean).join(" ") || "—"}
+                    {[r.student_first_name, r.student_middle_name, r.student_last_name]
+                      .filter(Boolean)
+                      .join(" ") || "—"}
                   </TableCell>
                   <TableCell>{r.student_mobile || r.student_home_phone || "—"}</TableCell>
                   <TableCell>{r.student_email || "—"}</TableCell>

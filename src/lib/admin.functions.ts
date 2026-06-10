@@ -72,6 +72,7 @@ export type EnrollmentRow = {
   id: string;
   created_at: string;
   student_first_name: string | null;
+  student_middle_name: string | null;
   student_last_name: string | null;
   student_email: string | null;
   student_mobile: string | null;
@@ -141,6 +142,7 @@ async function queryEnrollments(filters: z.infer<typeof ListInput>, limit: numbe
             `home_phone_number.ilike.${like}`,
             `email.ilike.${like}`,
             `first_name.ilike.${like}`,
+            `middle_name.ilike.${like}`,
             `last_name.ilike.${like}`,
             `license_number.ilike.${like}`,
           ].join(","),
@@ -206,7 +208,7 @@ async function queryEnrollments(filters: z.infer<typeof ListInput>, limit: numbe
     const { data: studs } = await supabase
       .from("students")
       .select(
-        "id, first_name, last_name, email, mobile_phone_number, home_phone_number, city, license_number",
+        "id, first_name, middle_name, last_name, email, mobile_phone_number, home_phone_number, city, license_number",
       )
       .in("id", sIds);
     studentMap = Object.fromEntries((studs ?? []).map((s: { id: string }) => [s.id, s]));
@@ -270,6 +272,7 @@ async function queryEnrollments(filters: z.infer<typeof ListInput>, limit: numbe
       payment_status: e.payment_status,
       enrollment_status: e.enrollment_status,
       student_first_name: (s as { first_name?: string }).first_name ?? null,
+      student_middle_name: (s as { middle_name?: string }).middle_name ?? null,
       student_last_name: (s as { last_name?: string }).last_name ?? null,
       student_email: (s as { email?: string }).email ?? null,
       student_mobile: (s as { mobile_phone_number?: string }).mobile_phone_number ?? null,
@@ -291,7 +294,10 @@ export const listEnrollments = createServerFn({ method: "POST" })
     return queryEnrollments(data, limit, offset);
   });
 
-const ExportInput = ListInput.extend({
+const ExportInput = z.object({
+  search: z.string().max(200).optional().default(""),
+  date_from: z.string().optional().default(""),
+  date_to: z.string().optional().default(""),
   format: z.enum(["csv", "xlsx"]).default("csv"),
 });
 

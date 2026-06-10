@@ -135,6 +135,7 @@ Stores student personal and license information.
 | last_name              | TEXT        | Last name         | -                  |
 | middle_name            | TEXT        | Middle name       | NULL               |
 | address                | TEXT        | Address           | -                  |
+| pickup_dropoff_address | TEXT        | Pickup/drop-off address | NULL         |
 | city                   | TEXT        | City              | -                  |
 | postal_code            | TEXT        | Postal code       | -                  |
 | email                  | TEXT        | Email             | -                  |
@@ -145,6 +146,7 @@ Stores student personal and license information.
 | parent_phone           | TEXT        | Parent phone      | NULL               |
 | is_minor               | BOOLEAN     | Minor flag        | false              |
 | school_name            | TEXT        | School (if minor) | NULL               |
+| school_attended        | TEXT        | School attended   | NULL               |
 | date_of_birth          | DATE        | DOB               | -                  |
 | license_status         | ENUM        | License status    | 'none'             |
 | license_number         | TEXT        | License number    | NULL               |
