@@ -268,7 +268,12 @@ async function requireAdmin() {
   if (!session.data.userId) throw new Error("Unauthorized");
 }
 
-async function resolveEnrollmentSearch(supabase: ReturnType<typeof import("@/integrations/external-supabase.server")["getExternalSupabase"]>, filters: EnrollmentFilters) {
+async function resolveEnrollmentSearch(
+  supabase: ReturnType<
+    (typeof import("@/integrations/external-supabase.server"))["getExternalSupabase"]
+  >,
+  filters: EnrollmentFilters,
+) {
   const search = filters.search.trim();
   let directEnrollmentId: string | null = null;
   let studentIds: string[] | null = null;
@@ -320,18 +325,27 @@ async function resolveEnrollmentSearch(supabase: ReturnType<typeof import("@/int
 }
 
 function applyEnrollmentDateFilters<T>(query: T, filters: EnrollmentFilters) {
-  let nextQuery = query as T & { gte: (column: string, value: string) => T; lte: (column: string, value: string) => T };
+  let nextQuery = query as T & {
+    gte: (column: string, value: string) => T;
+    lte: (column: string, value: string) => T;
+  };
 
-  if (filters.date_from) nextQuery = nextQuery.gte("created_at", filters.date_from) as typeof nextQuery;
+  if (filters.date_from)
+    nextQuery = nextQuery.gte("created_at", filters.date_from) as typeof nextQuery;
   if (filters.date_to) {
-    const end = filters.date_to.length === 10 ? `${filters.date_to}T23:59:59.999Z` : filters.date_to;
+    const end =
+      filters.date_to.length === 10 ? `${filters.date_to}T23:59:59.999Z` : filters.date_to;
     nextQuery = nextQuery.lte("created_at", end) as typeof nextQuery;
   }
 
   return nextQuery;
 }
 
-function applyEnrollmentSearchFilters<T>(query: T, filters: EnrollmentFilters, searchMatches: SearchMatches) {
+function applyEnrollmentSearchFilters<T>(
+  query: T,
+  filters: EnrollmentFilters,
+  searchMatches: SearchMatches,
+) {
   const search = filters.search.trim();
   let nextQuery = query as T & { or: (value: string) => T };
 
@@ -420,7 +434,10 @@ function normalizeJsonArray(value: unknown): string[] {
   return [];
 }
 
-function isMissingColumnError(error: { details?: string | null; hint?: string | null; message?: string }, columnName: string) {
+function isMissingColumnError(
+  error: { details?: string | null; hint?: string | null; message?: string },
+  columnName: string,
+) {
   const haystack = [error.message, error.details, error.hint].filter(Boolean).join(" ").toLowerCase();
   return haystack.includes("column") && haystack.includes(columnName.toLowerCase());
 }
@@ -438,7 +455,9 @@ function extractMissingColumnName(
 }
 
 async function fetchExportStudents(
-  supabase: ReturnType<typeof import("@/integrations/external-supabase.server")["getExternalSupabase"]>,
+  supabase: ReturnType<
+    (typeof import("@/integrations/external-supabase.server"))["getExternalSupabase"]
+  >,
   studentIds: string[],
 ) {
   let remainingColumns = [...EXPORT_STUDENT_COLUMNS];
@@ -458,7 +477,9 @@ async function fetchExportStudents(
         date_of_birth: typeof student.date_of_birth === "string" ? student.date_of_birth : null,
         address: typeof student.address === "string" ? student.address : null,
         pickup_dropoff_address:
-          typeof student.pickup_dropoff_address === "string" ? student.pickup_dropoff_address : null,
+          typeof student.pickup_dropoff_address === "string"
+            ? student.pickup_dropoff_address
+            : null,
         city: typeof student.city === "string" ? student.city : null,
         state: typeof student.state === "string" ? student.state : null,
         postal_code: typeof student.postal_code === "string" ? student.postal_code : null,
@@ -476,7 +497,8 @@ async function fetchExportStudents(
               ? student.license_issue_region
               : null,
         license_type: typeof student.license_type === "string" ? student.license_type : null,
-        license_issue_date: typeof student.license_issue_date === "string" ? student.license_issue_date : null,
+        license_issue_date:
+          typeof student.license_issue_date === "string" ? student.license_issue_date : null,
         license_expiry_date:
           typeof student.license_expiry_date === "string" ? student.license_expiry_date : null,
         driving_experience:
@@ -498,7 +520,10 @@ async function fetchExportStudents(
     }
 
     const missingColumn = extractMissingColumnName(result.error, "students");
-    if (!missingColumn || !remainingColumns.includes(missingColumn as (typeof EXPORT_STUDENT_COLUMNS)[number])) {
+    if (
+      !missingColumn ||
+      !remainingColumns.includes(missingColumn as (typeof EXPORT_STUDENT_COLUMNS)[number])
+    ) {
       throw new Error(result.error.message);
     }
 
@@ -646,7 +671,9 @@ async function queryEnrollmentExportRows(filters: EnrollmentFilters, limit: numb
 
   const [students, enrollmentCoursesResult, availabilityResult, paymentResult, cardInfoResult] =
     await Promise.all([
-      studentIds.length ? fetchExportStudents(supabase, studentIds) : Promise.resolve([] as ExportStudentRecord[]),
+      studentIds.length
+        ? fetchExportStudents(supabase, studentIds)
+        : Promise.resolve([] as ExportStudentRecord[]),
       supabase
         .from("enrollment_course")
         .select("enrollment_id, course_id")
@@ -740,8 +767,8 @@ async function queryEnrollmentExportRows(filters: EnrollmentFilters, limit: numb
     const student = enrollment.student_id ? studentMap[enrollment.student_id] : null;
     const selectedCourseIds = getUniqueStrings(enrollmentCourseMap[enrollment.id] ?? []);
     const primaryCourseName =
-      (enrollment.course_id ? courseMap[enrollment.course_id]?.name ?? null : null) ??
-      (selectedCourseIds.length > 0 ? courseMap[selectedCourseIds[0]]?.name ?? null : null);
+      (enrollment.course_id ? (courseMap[enrollment.course_id]?.name ?? null) : null) ??
+      (selectedCourseIds.length > 0 ? (courseMap[selectedCourseIds[0]]?.name ?? null) : null);
     const optionalCourseNames = selectedCourseIds
       .filter((courseId) => courseId !== enrollment.course_id)
       .map((courseId) => courseMap[courseId]?.name ?? null);
@@ -833,10 +860,7 @@ export const exportEnrollments = createServerFn({ method: "POST" })
     if (data.format === "xlsx") {
       const XLSX = await import("xlsx");
       const headers = EXPORT_COLUMNS.map(({ header }) => header);
-      const aoa = [
-        headers,
-        ...rows.map((row) => getExportRowValues(row)),
-      ];
+      const aoa = [headers, ...rows.map((row) => getExportRowValues(row))];
       const ws = XLSX.utils.aoa_to_sheet(aoa);
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, "Enrollments");
