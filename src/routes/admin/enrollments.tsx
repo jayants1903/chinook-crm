@@ -71,6 +71,7 @@ function EnrollmentsPage() {
   const [dateTo, setDateTo] = useState("");
   const [page, setPage] = useState(1);
   const [isExporting, setIsExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
   const pageSize = 50;
 
   const [filters, setFilters] = useState({ search: "", date_from: "", date_to: "" });
@@ -97,6 +98,7 @@ function EnrollmentsPage() {
 
   async function onExport(format: "csv" | "xlsx") {
     try {
+      setExportError(null);
       setIsExporting(true);
       const res = await exportFn({ data: { ...filters, format } });
       if (res.format === "csv") {
@@ -108,6 +110,8 @@ function EnrollmentsPage() {
         );
         downloadFile(res.filename, blob, blob.type);
       }
+    } catch (error) {
+      setExportError(error instanceof Error ? error.message : "Export failed");
     } finally {
       setIsExporting(false);
     }
@@ -188,10 +192,10 @@ function EnrollmentsPage() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem disabled={isExporting} onClick={() => onExport("csv")}>
+              <DropdownMenuItem disabled={isExporting} onSelect={() => void onExport("csv")}>
                 Export as CSV
               </DropdownMenuItem>
-              <DropdownMenuItem disabled={isExporting} onClick={() => onExport("xlsx")}>
+              <DropdownMenuItem disabled={isExporting} onSelect={() => void onExport("xlsx")}>
                 Export as XLSX
               </DropdownMenuItem>
             </DropdownMenuContent>
@@ -201,6 +205,12 @@ function EnrollmentsPage() {
         {error && (
           <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">
             {error instanceof Error ? error.message : "Failed to load"}
+          </div>
+        )}
+
+        {exportError && (
+          <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">
+            {exportError}
           </div>
         )}
 
